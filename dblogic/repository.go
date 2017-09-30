@@ -11,7 +11,22 @@ import (
 )
 type Repository struct{}
 
-var Conf Config
+var Conf Config = Config {
+	"localhost:27017",
+	"Test",
+	"testlist",
+	"172.28.128.3",
+	"3000",
+}
+
+func ClearTable() {
+	session, err := mgo.Dial(Conf.MongoDBhost)
+	if err != nil {
+		log.Println("Failed to establish connection to mongodb", err)
+	}
+	defer session.Close()
+	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveAll(nil)
+}
 
 func (r Repository) SetConfig(config Config){
 	Conf = config
@@ -138,22 +153,21 @@ func (r Repository) AddData(data Data) string{
 	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Insert(data)
 	if err != nil {
 		log.Fatal(err)
-		return "Cannot add item"
+		return "0"
 	}
-	return data.Id.String()
+	return data.Id.Hex()
 }
 
 func (r Repository) UpdateData(data Data) bool {
 	session, err := mgo.Dial(Conf.MongoDBhost)
 	defer session.Close()
-	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).UpdateId(data.Id, data)
+	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Update(bson.M{"_id": data.Id}, bson.M{ "$set": bson.M{"name": data.Name, "data": data.Data_itself }})
 	if err != nil {
 		log.Fatal(err)
 		return false
 	}
 	return true
 }
-
 
 func (r Repository) DeleteData(id string) string{
 	session, err := mgo.Dial(Conf.MongoDBhost)
@@ -171,5 +185,3 @@ func (r Repository) DeleteData(id string) string{
 	}
 	return "OK"
 }
-
-

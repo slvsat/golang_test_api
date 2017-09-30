@@ -59,12 +59,11 @@ func AddData(writer http.ResponseWriter, request *http.Request){
 		}
 	}
 	success := repository.AddData(data)
-	if success == "Cannot add item" {
+	if success == "0" {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	writer.Write([]byte(success))
-	WriteHeader(writer)
 	writer.WriteHeader(http.StatusCreated)
 	return
 }
