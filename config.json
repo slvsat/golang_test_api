@@ -1,0 +1,7 @@
+{
+  "MongoDBhost": "localhost:27017",
+  "MongoDBname": "Test",
+  "MongoDBdocname": "testlist",
+  "AerospikeHost": "172.28.128.3",
+  "AerospikePort": "3000"
+}
