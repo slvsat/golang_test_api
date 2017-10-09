@@ -12,6 +12,7 @@ import (
 	"go.api/dblogic"
 )
 
+
 func WriteHeader(writer http.ResponseWriter){
 	writer.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -21,7 +22,7 @@ func WriteHeader(writer http.ResponseWriter){
 func Index(writer http.ResponseWriter, request *http.Request) {
 	queryString := request.URL.Query().Get("q")
 	log.Println("URL : ", request.URL.RequestURI())
-	data := repository.GetData(request.URL.RequestURI(), queryString)
+	data, _ := repository.GetData(request.URL.RequestURI(), queryString)
 	WriteHeader(writer)
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(data)
@@ -32,7 +33,7 @@ func GetDataById(writer http.ResponseWriter, request *http.Request){
 	vars := mux.Vars(request)
 	id := vars["itemId"]
 	log.Println("URL : ", request.URL.RequestURI())
-	data := repository.GetDataById(request.URL.RequestURI(), id)
+	data, _ := repository.GetDataById(request.URL.RequestURI(), id)
 	WriteHeader(writer)
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(data)
@@ -58,7 +59,7 @@ func AddData(writer http.ResponseWriter, request *http.Request){
 			return
 		}
 	}
-	success := repository.AddData(data)
+	success, _ := repository.AddData(data)
 	if success == "0" {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
@@ -90,7 +91,7 @@ func UpdateData(writer http.ResponseWriter, request *http.Request){
 	}
 	vars := mux.Vars(request)
 	data.Id = bson.ObjectIdHex(vars["itemId"])
-	success := repository.UpdateData(data)
+	success, _ := repository.UpdateData(data)
 	if !success {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return

@@ -5,7 +5,8 @@ import (
 	"log"
 	"net/http"
 )
-var repository dblogic.Repository = dblogic.Repository{}
+
+var repository dblogic.Repository = *dblogic.NewRepository()
 
 func Run(conf dblogic.Config){
 	router := NewRouter()

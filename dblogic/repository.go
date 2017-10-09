@@ -1,7 +1,6 @@
 package dblogic
 
 import (
-	"fmt"
 	"log"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -9,7 +8,11 @@ import (
 	"encoding/json"
 	"strconv"
 )
-type Repository struct{}
+type Repository struct{
+	mongoSession *mgo.Session
+	client *aerospike.Client
+	policy *aerospike.WritePolicy
+}
 
 var Conf Config = Config {
 	"localhost:27017",
@@ -19,52 +22,52 @@ var Conf Config = Config {
 	"3000",
 }
 
-func ClearTable() {
+func NewRepository() *Repository {
 	session, err := mgo.Dial(Conf.MongoDBhost)
 	if err != nil {
-		log.Println("Failed to establish connection to mongodb", err)
+		log.Println("Cannot make session to MongoDB! ", err)
+		panic(err)
 	}
-	defer session.Close()
-	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveAll(nil)
+	port, _ := strconv.Atoi(Conf.AerospikePort)
+	conClient, err := aerospike.NewClient(Conf.AerospikeHost, port)
+	if err != nil{
+		log.Println("Cannot connect to Aerospike! ", err)
+		panic(err)
+	}
+	conPolicy := aerospike.NewWritePolicy(0, 10)
+	return &Repository{
+		mongoSession: session,
+		client: conClient,
+		policy: conPolicy,
+	}
 }
 
-func (r Repository) SetConfig(config Config){
+func (r *Repository) ClearTable() {
+	r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveAll(nil)
+}
+
+func (r *Repository) SetConfig(config Config){
 	Conf = config
 }
 
-func connClient() (*aerospike.Client, *aerospike.WritePolicy){
-	port, _ := strconv.Atoi(Conf.AerospikePort)
-	//log.Println(port)
-	//log.Println(Conf.AerospikeHost)
-	client, err := aerospike.NewClient(Conf.AerospikeHost, port)
-	if err != nil {
-		log.Println("Error while connection to aerospike", err)
-		panic(err)
-	}
-	policy := aerospike.NewWritePolicy(0, 10)
-	return client, policy
-}
-
-func writeDataToAerospike(client *aerospike.Client, key *aerospike.Key, policy *aerospike.WritePolicy, data []Data) bool {
+func (r *Repository) writeDataToAerospike(key *aerospike.Key, data []Data) bool {
 	dataToWrite, _ := json.Marshal(data)
 	bins := aerospike.BinMap{
 		"bin1" : string(dataToWrite),
 	}
-	err := client.Put(policy, key, bins)
+	err := r.client.Put(r.policy, key, bins)
 	if err != nil {
 		return false
 	}
 	return true
 }
 
-func getFromAerospike(client *aerospike.Client, key *aerospike.Key) string{
-	rec, err := client.Get(nil, key)
+func (r *Repository) getFromAerospike(key *aerospike.Key) (string, error) {
+	rec, err := r.client.Get(nil, key)
 	if err != nil {
 		log.Println("Error while getting data from aerospike", err)
-		panic(err)
 	}
-	return rec.Bins["bin1"].(string)
-
+	return rec.Bins["bin1"].(string), err
 }
 
 func parseQuery(q string) bson.M{
@@ -81,106 +84,85 @@ func parseQuery(q string) bson.M{
 	return nil
 }
 
-func (r Repository) GetDataById(url string, id string) []byte{
-	client, policy := connClient()
-
+func (r *Repository) GetDataById(url string, id string) ([]byte, error) {
 	key, err := aerospike.NewKey("test", "aerospike", url)
 	if err != nil {
 		log.Println("Error while creating a key (get data by id) ", err)
-		panic(err)
 	}
-
-	exist, err := client.Exists(nil, key)
+	exist, err := r.client.Exists(nil, key)
 	if err != nil {
-		panic(err)
+		log.Println("Given key doesn't exist! ", err)
 	}
 	result := make([]Data, 0)
 	if exist == false{
-		session, err := mgo.Dial(Conf.MongoDBhost)
-		if err != nil {
-			log.Println("Failed to establish connection to mongodb", err)
-		}
-		defer session.Close()
-		c := session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname)
+		c := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname)
 		if err := c.FindId(bson.ObjectIdHex(id)).All(&result); err != nil {
-			panic(err)
+			log.Println("Cannot find item by ID ", err)
 		}
-		writeDataToAerospike(client, key, policy, result)
+		r.writeDataToAerospike(key, result)
 	}else {
-		return []byte(getFromAerospike(client, key))
+		out, err := r.getFromAerospike(key)
+		if err != nil {
+			log.Println("Cannot get data from Aerospike ", err)
+		}
+		return []byte(out), err
 	}
-	output, _ := json.Marshal(result)
-	return output
+	output, err := json.Marshal(result)
+	return output, err
 }
 
-func (r Repository) GetData(url string, query string) []byte {
-	client, policy := connClient()
-
+func (r *Repository) GetData(url string, query string) ([]byte, error) {
 	key, err := aerospike.NewKey("test", "aerospike", url)
 	if err != nil {
 		log.Println("Error while creating a key (aerospike)", err)
 		panic(err)
 	}
 
-	exist, err := client.Exists(nil, key)
+	exist, err := r.client.Exists(nil, key)
 	if err != nil {
-		panic(err)
+		log.Println("Key doesn't exist! ", err)
 	}
 	results := make([]Data, 0)
 	if exist == false {
-		session, err := mgo.Dial(Conf.MongoDBhost)
-		if err != nil {
-			log.Println("Failed to establish connection to Mongo server:", err)
-		}
-		defer session.Close()
-		c := session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname)
+		c := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname)
 		if err := c.Find(parseQuery(query)).All(&results); err != nil {
 			log.Println("Failed to write results:", err)
 		}
-		writeDataToAerospike(client, key, policy, results)
+		r.writeDataToAerospike(key, results)
 	}else {
-		return []byte(getFromAerospike(client, key))
+		out, err := r.getFromAerospike(key)
+		if err != nil {
+			log.Println("Cannot get data from Aerospike! ", err)
+		}
+		return []byte(out), err
 	}
-	output, _ := json.Marshal(results)
-	return output
+	output, err := json.Marshal(results)
+	return output, err
 }
 
 
-func (r Repository) AddData(data Data) string{
-	session, err := mgo.Dial(Conf.MongoDBhost)
-	defer session.Close()
+func (r *Repository) AddData(data Data) (string, error){
 	data.Id = bson.NewObjectId()
-	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Insert(data)
-	if err != nil {
-		log.Fatal(err)
-		return "0"
-	}
-	return data.Id.Hex()
+	err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Insert(data)
+	return data.Id.Hex(), err
 }
 
-func (r Repository) UpdateData(data Data) bool {
-	session, err := mgo.Dial(Conf.MongoDBhost)
-	defer session.Close()
-	session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Update(bson.M{"_id": data.Id}, bson.M{ "$set": bson.M{"name": data.Name, "data": data.Data_itself }})
+func (r *Repository) UpdateData(data Data) (bool, error) {
+	err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Update(bson.M{"_id": data.Id}, bson.M{ "$set": bson.M{"name": data.Name, "data": data.Data_itself }})
 	if err != nil {
-		log.Fatal(err)
-		return false
+		log.Println("Cannot update item ", err)
+		return false, err
 	}
-	return true
+	return true, err
 }
 
-func (r Repository) DeleteData(id string) string{
-	session, err := mgo.Dial(Conf.MongoDBhost)
-	if err != nil{
-		fmt.Println("Failed to establish connection to Mongo server: ", err)
-	}
-	defer session.Close()
-	if !bson.IsObjectIdHex(id){
+func (r *Repository) DeleteData(id string) string{
+	if !bson.IsObjectIdHex(id) {
 		return "404" //NOT FOUND
 	}
 	oid := bson.ObjectIdHex(id)
-	if err := session.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveId(oid); err != nil {
-		log.Fatal(err)
+	if err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveId(oid); err != nil {
+		log.Println("Error while removing item! ", err)
 		return "500" //INTERNAL SERVER ERROR
 	}
 	return "OK"
