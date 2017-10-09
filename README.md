@@ -1,22 +1,25 @@
 Test API
 Test API writen in Go, dbs: MongoDB, Aerospike, initialization as cli.
 
-Requirements
+###Requirements
 
-Go Runtime
-MongoDB
-Aerospike
+* Go Runtime
+* MongoDB
+* Aerospike
 
-Getting Started
+###Getting Started
 
 Go to root directory
 
 Run MongoDB and Aerospike
 
-Run:
+###Run:
 
+```
 go get
+```
 
 Edit config.json file then run command:
-
+```
 go run main.go -c=config.json
+```
