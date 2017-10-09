@@ -22,5 +22,5 @@ go get
 
 Edit config.json file then run command:
 ```
-go run main.go -c=config.json
+go run main.go -c=../config/config.json
 ```
