@@ -91,8 +91,8 @@ func UpdateData(writer http.ResponseWriter, request *http.Request){
 	}
 	vars := mux.Vars(request)
 	data.Id = bson.ObjectIdHex(vars["itemId"])
-	success, _ := repository.UpdateData(data)
-	if !success {
+	err = repository.UpdateData(data)
+	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}

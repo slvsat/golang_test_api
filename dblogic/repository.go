@@ -7,6 +7,7 @@ import (
 	"github.com/aerospike/aerospike-client-go"
 	"encoding/json"
 	"strconv"
+	"errors"
 )
 type Repository struct{
 	mongoSession *mgo.Session
@@ -50,24 +51,25 @@ func (r *Repository) SetConfig(config Config){
 	Conf = config
 }
 
-func (r *Repository) writeDataToAerospike(key *aerospike.Key, data []Data) bool {
+func (r *Repository) writeDataToAerospike(key *aerospike.Key, data []Data) error {
 	dataToWrite, _ := json.Marshal(data)
 	bins := aerospike.BinMap{
 		"bin1" : string(dataToWrite),
 	}
 	err := r.client.Put(r.policy, key, bins)
 	if err != nil {
-		return false
+		return errors.New("Cannot write data to aerospike! ")
 	}
-	return true
+	return nil
 }
 
 func (r *Repository) getFromAerospike(key *aerospike.Key) (string, error) {
 	rec, err := r.client.Get(nil, key)
 	if err != nil {
 		log.Println("Error while getting data from aerospike", err)
+		return "", err
 	}
-	return rec.Bins["bin1"].(string), err
+	return rec.Bins["bin1"].(string), nil
 }
 
 func parseQuery(q string) bson.M{
@@ -99,7 +101,11 @@ func (r *Repository) GetDataById(url string, id string) ([]byte, error) {
 		if err := c.FindId(bson.ObjectIdHex(id)).All(&result); err != nil {
 			log.Println("Cannot find item by ID ", err)
 		}
-		r.writeDataToAerospike(key, result)
+		err := r.writeDataToAerospike(key, result)
+		if err != nil {
+			log.Println("function writeDataToAerospike crashed ", err)
+			return nil, err
+		}
 	}else {
 		out, err := r.getFromAerospike(key)
 		if err != nil {
@@ -133,27 +139,35 @@ func (r *Repository) GetData(url string, query string) ([]byte, error) {
 		out, err := r.getFromAerospike(key)
 		if err != nil {
 			log.Println("Cannot get data from Aerospike! ", err)
+			return nil, err
 		}
-		return []byte(out), err
+		return []byte(out), nil
 	}
 	output, err := json.Marshal(results)
-	return output, err
+	if err != nil {
+		log.Println("Error while Marshaling data", err)
+		return nil, err
+	}
+	return output, nil
 }
 
 
 func (r *Repository) AddData(data Data) (string, error){
 	data.Id = bson.NewObjectId()
 	err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Insert(data)
-	return data.Id.Hex(), err
+	if err != nil {
+		return "", err
+	}
+	return data.Id.Hex(), nil
 }
 
-func (r *Repository) UpdateData(data Data) (bool, error) {
+func (r *Repository) UpdateData(data Data) error {
 	err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Update(bson.M{"_id": data.Id}, bson.M{ "$set": bson.M{"name": data.Name, "data": data.Data_itself }})
 	if err != nil {
 		log.Println("Cannot update item ", err)
-		return false, err
+		return err
 	}
-	return true, err
+	return nil
 }
 
 func (r *Repository) DeleteData(id string) string{
