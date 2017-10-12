@@ -12,8 +12,10 @@ import (
 
 //TESTING
 
+var rep dblogic.Repository = *dblogic.NewRepository()
+
 func TestGetRequest(t *testing.T){
-	dblogic.ClearTable()
+	rep.ClearTable()
 
 	req, err := http.NewRequest("GET", "/items", nil)
 	if err != nil {
@@ -48,7 +50,6 @@ func TestPostRequest(t *testing.T) {
 	handler := http.HandlerFunc(AddData)
 	handler.ServeHTTP(rr, req)
 
-	//log.Println(rr.Body)
 	if rr.Body == nil {
 		t.Errorf("Returned nil, expected ID")
 	}
@@ -59,7 +60,7 @@ func TestPutRequest(t *testing.T){
 	reqBody := `{"name": "NewOne", "data_itself": "SecondOne"}`
 	req, err := http.NewRequest("PUT", "/items/" + Id, bytes.NewBuffer([]byte(reqBody)))
 	if err != nil {
-		t.Fatalf("Cannot create update request! ", err)
+		t.Fatalf("Cannot create update request! %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -76,7 +77,7 @@ func TestPutRequest(t *testing.T){
 func TestDeleteData(t *testing.T) {
 	req, err := http.NewRequest("DELETE", "/items/" + Id, nil)
 	if err != nil {
-		t.Fatalf("Cannot create delete request! ", err)
+		t.Fatalf("Cannot create delete request! %v", err)
 	}
 	rr := httptest.NewRecorder()
 	handler := mux.NewRouter()
@@ -91,7 +92,7 @@ func TestDeleteData(t *testing.T) {
 //BENCHMARKING
 
 func BenchmarkIndex(b *testing.B) {
-	dblogic.ClearTable()
+	rep.ClearTable()
 	req, err := http.NewRequest("GET", "/items", nil)
 	if err != nil {
 		log.Println("Request error! ", err)
@@ -138,7 +139,7 @@ func BenchmarkUpdateData(b *testing.B) {
 		reqBody := `{"name": "NewOne", "data_itself": "SecondOne"}`
 		req, err := http.NewRequest("PUT", "/items/" + element, bytes.NewBuffer([]byte(reqBody)))
 		if err != nil {
-			b.Fatalf("Cannot create update request! ", err)
+			b.Fatalf("Cannot create update request! %v", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -157,7 +158,7 @@ func BenchmarkDeleteData(b *testing.B) {
 	for _, element := range Ids {
 		req, err := http.NewRequest("DELETE", "/items/" + element, nil)
 		if err != nil {
-			b.Fatalf("Cannot create delete request! ", err)
+			b.Fatalf("Cannot create delete request! %v", err)
 		}
 		rr := httptest.NewRecorder()
 		handler := mux.NewRouter()

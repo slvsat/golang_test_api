@@ -6,8 +6,10 @@ import (
 	"net/http"
 )
 
+//Creating an instance of Repository
 var repository dblogic.Repository = *dblogic.NewRepository()
 
+//Running server on port 8080
 func Run(conf dblogic.Config){
 	router := NewRouter()
 	repository.SetConfig(conf)

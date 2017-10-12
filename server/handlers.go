@@ -12,16 +12,17 @@ import (
 	"go.api/dblogic"
 )
 
-
+//Writing content type and access to the header
 func WriteHeader(writer http.ResponseWriter){
 	writer.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
 	return
 }
 
+//Taking url query if exist and returning a data from GetData function
 func Index(writer http.ResponseWriter, request *http.Request) {
 	queryString := request.URL.Query().Get("q")
-	log.Println("URL : ", request.URL.RequestURI())
+	//log.Println("URL : ", request.URL.RequestURI())
 	data, _ := repository.GetData(request.URL.RequestURI(), queryString)
 	WriteHeader(writer)
 	writer.WriteHeader(http.StatusOK)
@@ -29,6 +30,7 @@ func Index(writer http.ResponseWriter, request *http.Request) {
 	return
 }
 
+//Taking ID specified in url and returning a value corresponding to this ID
 func GetDataById(writer http.ResponseWriter, request *http.Request){
 	vars := mux.Vars(request)
 	id := vars["itemId"]
@@ -40,6 +42,7 @@ func GetDataById(writer http.ResponseWriter, request *http.Request){
 	return
 }
 
+//Adding data to the Database, returning added Object Id
 func AddData(writer http.ResponseWriter, request *http.Request){
 	var data dblogic.Data
 	body, err := ioutil.ReadAll(io.LimitReader(request.Body, 1048576))
@@ -69,6 +72,7 @@ func AddData(writer http.ResponseWriter, request *http.Request){
 	return
 }
 
+//Updating data by specified Id, returning status of the Request (http status)
 func UpdateData(writer http.ResponseWriter, request *http.Request){
 	var data dblogic.Data
 	body, err := ioutil.ReadAll(io.LimitReader(request.Body, 1048576))
@@ -101,13 +105,14 @@ func UpdateData(writer http.ResponseWriter, request *http.Request){
 	return
 }
 
+//Delete data by specified Id, returning status of removing (http status)
 func DeleteData (writer http.ResponseWriter, request *http.Request){
 	vars := mux.Vars(request)
 	itemId := vars["itemId"]
-	if err := repository.DeleteData(itemId); err != "" {
-		if strings.Contains(err, "404") {
+	if outString, err := repository.DeleteData(itemId); err != nil {
+		if strings.Contains(outString, "404") {
 			writer.WriteHeader(http.StatusNotFound)
-		} else if strings.Contains(err, "500"){
+		} else if strings.Contains(outString, "500"){
 			writer.WriteHeader(http.StatusInternalServerError)
 		}
 		return

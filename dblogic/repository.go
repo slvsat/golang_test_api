@@ -9,12 +9,18 @@ import (
 	"strconv"
 	"errors"
 )
+
+//All manipulations (Create, Read, Update, Delete) will be realized through this struct
+//to have always opened connection to the database we have pointers to session, client, etc.
 type Repository struct{
 	mongoSession *mgo.Session
 	client *aerospike.Client
 	policy *aerospike.WritePolicy
 }
 
+
+//Default config for connections (Specified for MacOS - Vagrant Aerospike and MongoDB)
+//you can just change config file to have another
 var Conf Config = Config {
 	"localhost:27017",
 	"Test",
@@ -23,6 +29,8 @@ var Conf Config = Config {
 	"3000",
 }
 
+
+//Initializer
 func NewRepository() *Repository {
 	session, err := mgo.Dial(Conf.MongoDBhost)
 	if err != nil {
@@ -43,14 +51,17 @@ func NewRepository() *Repository {
 	}
 }
 
+//Clearing MongoDB table (if have any)
 func (r *Repository) ClearTable() {
 	r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveAll(nil)
 }
 
+//Setting config if have a config file
 func (r *Repository) SetConfig(config Config){
 	Conf = config
 }
 
+//Using aerospike as a cache, so key is the current url and data returned from MongoDB
 func (r *Repository) writeDataToAerospike(key *aerospike.Key, data []Data) error {
 	dataToWrite, _ := json.Marshal(data)
 	bins := aerospike.BinMap{
@@ -58,11 +69,12 @@ func (r *Repository) writeDataToAerospike(key *aerospike.Key, data []Data) error
 	}
 	err := r.client.Put(r.policy, key, bins)
 	if err != nil {
-		return errors.New("Cannot write data to aerospike! ")
+		return err
 	}
 	return nil
 }
 
+//Getting data from Aerospike by a specified key
 func (r *Repository) getFromAerospike(key *aerospike.Key) (string, error) {
 	rec, err := r.client.Get(nil, key)
 	if err != nil {
@@ -72,20 +84,22 @@ func (r *Repository) getFromAerospike(key *aerospike.Key) (string, error) {
 	return rec.Bins["bin1"].(string), nil
 }
 
-func parseQuery(q string) bson.M{
+//Parsing query string, if have any
+func parseQuery(q string) (bson.M, error){
 	if q != "" {
 		outQuery := bson.M{}
 		err := bson.UnmarshalJSON([]byte(q), &outQuery)
 		if err != nil{
 			log.Println("Error while UnmarshalingJSON ", err)
-			panic(err)
+			return nil, err
 		}
-		log.Println(outQuery)
-		return outQuery
+		//log.Println(outQuery)
+		return outQuery, nil
 	}
-	return nil
+	return nil, nil
 }
 
+//Taking url and id as strings, returning data from Aerospike if exist, otherwise from MongoDB with specified id
 func (r *Repository) GetDataById(url string, id string) ([]byte, error) {
 	key, err := aerospike.NewKey("test", "aerospike", url)
 	if err != nil {
@@ -113,15 +127,15 @@ func (r *Repository) GetDataById(url string, id string) ([]byte, error) {
 		}
 		return []byte(out), err
 	}
-	output, err := json.Marshal(result)
-	return output, err
+	return json.Marshal(result)
 }
 
+//Returning whole data from Aerospike if exist, otherwise from MongoDB directly
 func (r *Repository) GetData(url string, query string) ([]byte, error) {
 	key, err := aerospike.NewKey("test", "aerospike", url)
 	if err != nil {
 		log.Println("Error while creating a key (aerospike)", err)
-		panic(err)
+		return nil, err
 	}
 
 	exist, err := r.client.Exists(nil, key)
@@ -131,7 +145,12 @@ func (r *Repository) GetData(url string, query string) ([]byte, error) {
 	results := make([]Data, 0)
 	if exist == false {
 		c := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname)
-		if err := c.Find(parseQuery(query)).All(&results); err != nil {
+		parsedQuery, err := parseQuery(query)
+		if err != nil {
+			log.Println("Error while parsing query! ", err)
+			return nil, err
+		}
+		if err := c.Find(parsedQuery).All(&results); err != nil {
 			log.Println("Failed to write results:", err)
 		}
 		r.writeDataToAerospike(key, results)
@@ -152,6 +171,7 @@ func (r *Repository) GetData(url string, query string) ([]byte, error) {
 }
 
 
+//Adding data to MongoDB
 func (r *Repository) AddData(data Data) (string, error){
 	data.Id = bson.NewObjectId()
 	err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Insert(data)
@@ -161,6 +181,7 @@ func (r *Repository) AddData(data Data) (string, error){
 	return data.Id.Hex(), nil
 }
 
+//Updating data in MongoDB with specified id
 func (r *Repository) UpdateData(data Data) error {
 	err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).Update(bson.M{"_id": data.Id}, bson.M{ "$set": bson.M{"name": data.Name, "data": data.Data_itself }})
 	if err != nil {
@@ -170,14 +191,16 @@ func (r *Repository) UpdateData(data Data) error {
 	return nil
 }
 
-func (r *Repository) DeleteData(id string) string{
+//Deleting data by id
+//If ID is not ObjectIdHex returning an error
+func (r *Repository) DeleteData(id string) (string, error){
 	if !bson.IsObjectIdHex(id) {
-		return "404" //NOT FOUND
+		return "404", errors.New("ID is not ObjectIdHex! ")
 	}
 	oid := bson.ObjectIdHex(id)
 	if err := r.mongoSession.DB(Conf.MongoDBname).C(Conf.MongoDBdocname).RemoveId(oid); err != nil {
 		log.Println("Error while removing item! ", err)
-		return "500" //INTERNAL SERVER ERROR
+		return "500", err //INTERNAL SERVER ERROR
 	}
-	return "OK"
+	return "OK", nil
 }

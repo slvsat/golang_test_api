@@ -13,8 +13,6 @@ type Route struct {
 
 type Routes []Route
 
-//var handler = &Handler{Repository: dblogic.Repository{}}
-
 var routes = Routes{
 	Route{
 		"Index",
