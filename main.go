@@ -1,8 +1,6 @@
 package main
 
 import (
-	_ "log"
-	_ "net/http"
 	"go.api/server"
 	"github.com/urfave/cli"
 	"fmt"

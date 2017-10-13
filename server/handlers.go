@@ -23,11 +23,15 @@ func WriteHeader(writer http.ResponseWriter){
 func Index(writer http.ResponseWriter, request *http.Request) {
 	queryString := request.URL.Query().Get("q")
 	//log.Println("URL : ", request.URL.RequestURI())
-	data, _ := repository.GetData(request.URL.RequestURI(), queryString)
+	data, err := repository.GetData(request.URL.RequestURI(), queryString)
 	WriteHeader(writer)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		writer.Write(data)
+		return
+	}
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(data)
-	return
 }
 
 //Taking ID specified in url and returning a value corresponding to this ID
@@ -35,11 +39,15 @@ func GetDataById(writer http.ResponseWriter, request *http.Request){
 	vars := mux.Vars(request)
 	id := vars["itemId"]
 	log.Println("URL : ", request.URL.RequestURI())
-	data, _ := repository.GetDataById(request.URL.RequestURI(), id)
+	data, err := repository.GetDataById(request.URL.RequestURI(), id)
 	WriteHeader(writer)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		writer.Write(data)
+		return
+	}
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(data)
-	return
 }
 
 //Adding data to the Database, returning added Object Id
@@ -47,7 +55,7 @@ func AddData(writer http.ResponseWriter, request *http.Request){
 	var data dblogic.Data
 	body, err := ioutil.ReadAll(io.LimitReader(request.Body, 1048576))
 	if err != nil {
-		log.Fatalln("Error data: ", err)
+		log.Println("Error data: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -69,7 +77,6 @@ func AddData(writer http.ResponseWriter, request *http.Request){
 	}
 	writer.Write([]byte(success))
 	writer.WriteHeader(http.StatusCreated)
-	return
 }
 
 //Updating data by specified Id, returning status of the Request (http status)
@@ -102,7 +109,6 @@ func UpdateData(writer http.ResponseWriter, request *http.Request){
 	}
 	WriteHeader(writer)
 	writer.WriteHeader(http.StatusOK)
-	return
 }
 
 //Delete data by specified Id, returning status of removing (http status)
@@ -119,5 +125,4 @@ func DeleteData (writer http.ResponseWriter, request *http.Request){
 	}
 	WriteHeader(writer)
 	writer.WriteHeader(http.StatusOK)
-	return
 }
